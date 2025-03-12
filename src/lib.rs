@@ -7,8 +7,6 @@ use std::borrow::{Cow, ToOwned};
 use std::fmt::{self, Display, Formatter};
 use std::ops::Deref;
 
-pub use nom;
-
 pub trait Location {
     fn location(&self) -> usize;
 }
