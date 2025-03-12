@@ -28,7 +28,7 @@ where
         self.data
     }
 
-    fn to_data_offset(&self, data: &'i I) -> Self
+    fn to_data_offset(self, data: &'i I) -> Self
     where
         I: Offset,
     {
@@ -64,10 +64,7 @@ where
     I: ?Sized,
 {
     fn clone(&self) -> Self {
-        Located {
-            data: self.data,
-            location: self.location,
-        }
+        *self
     }
 }
 
