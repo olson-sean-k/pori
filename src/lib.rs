@@ -553,7 +553,7 @@ where
 
 pub fn span<I, F>(
     mut parser: F,
-) -> impl FnMut(I) -> IResult<I, ((usize, usize), F::Output), F::Error>
+) -> impl Parser<I, Output = ((usize, usize), F::Output), Error = F::Error>
 where
     I: Clone + Location,
     F: Parser<I>,
