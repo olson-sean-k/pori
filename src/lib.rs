@@ -50,7 +50,7 @@ where
     }
 }
 
-impl<'i, I> AsRef<I> for Located<'i, I>
+impl<I> AsRef<I> for Located<'_, I>
 where
     I: ?Sized,
 {
@@ -59,7 +59,7 @@ where
     }
 }
 
-impl<'i, I> Clone for Located<'i, I>
+impl<I> Clone for Located<'_, I>
 where
     I: ?Sized,
 {
@@ -84,9 +84,9 @@ where
     }
 }
 
-impl<'i, I> Copy for Located<'i, I> where I: ?Sized {}
+impl<I> Copy for Located<'_, I> where I: ?Sized {}
 
-impl<'i, I> Deref for Located<'i, I>
+impl<I> Deref for Located<'_, I>
 where
     I: ?Sized,
 {
@@ -97,7 +97,7 @@ where
     }
 }
 
-impl<'i, I> Display for Located<'i, I>
+impl<I> Display for Located<'_, I>
 where
     I: Display + ?Sized,
 {
@@ -269,7 +269,7 @@ where
     //}
 }
 
-impl<'i, I> Location for Located<'i, I>
+impl<I> Location for Located<'_, I>
 where
     I: ?Sized,
 {
@@ -278,7 +278,7 @@ where
     }
 }
 
-impl<'i, I> Offset for Located<'i, I>
+impl<I> Offset for Located<'_, I>
 where
     I: ?Sized,
 {
