@@ -6,10 +6,13 @@ description = "Parser state and error extensions for nom."
 repository = "https://github.com/olson-sean-k/pori"
 readme = "README.md"
 edition = "2021"
-rust-version = "1.56.0"
+rust-version = "1.65.0"
 license = "MIT"
-keywords = ["nom"]
+keywords = [
+    "diagnostics",
+    "nom",
+]
 categories = ["parsing"]
 
 [dependencies]
-nom = "^7.0.0"
+nom = "^8.0.0"

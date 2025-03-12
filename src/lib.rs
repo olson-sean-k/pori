@@ -1,11 +1,11 @@
 use nom::error::{Error as NomError, ErrorKind, ParseError};
 use nom::{
-    AsBytes, Compare, CompareResult, Err as ErrorMode, ExtendInto, IResult, InputIter, InputLength,
-    InputTake, InputTakeAtPosition, Needed, Offset, Parser, Slice,
+    AsBytes, Compare, CompareResult, Err as ErrorMode, ExtendInto, IResult, Input, Needed, Offset,
+    Parser,
 };
 use std::borrow::{Cow, ToOwned};
 use std::fmt::{self, Display, Formatter};
-use std::ops::{Deref, RangeFrom, RangeTo};
+use std::ops::Deref;
 
 pub use nom;
 
@@ -28,6 +28,17 @@ where
 {
     pub fn into_data(self) -> &'i I {
         self.data
+    }
+
+    fn to_data_offset(&self, data: &'i I) -> Self
+    where
+        I: Offset,
+    {
+        let offset = self.data.offset(data);
+        Located {
+            data,
+            location: self.location + offset,
+        }
     }
 }
 
@@ -135,21 +146,32 @@ where
     }
 }
 
-impl<'i, I> InputIter for Located<'i, I>
+impl<'i, I> Input for Located<'i, I>
 where
-    I: ?Sized,
-    &'i I: InputIter,
+    I: Offset + ?Sized,
+    &'i I: Input,
 {
-    type Item = <&'i I as InputIter>::Item;
-    type Iter = <&'i I as InputIter>::Iter;
-    type IterElem = <&'i I as InputIter>::IterElem;
+    type Item = <&'i I as Input>::Item;
+    type Iter = <&'i I as Input>::Iter;
+    type IterIndices = <&'i I as Input>::IterIndices;
 
-    fn iter_indices(&self) -> Self::Iter {
-        self.data.iter_indices()
+    fn input_len(&self) -> usize {
+        self.data.input_len()
     }
 
-    fn iter_elements(&self) -> Self::IterElem {
-        self.data.iter_elements()
+    fn take(&self, count: usize) -> Self {
+        let taken = self.data.take(count);
+        self.to_data_offset(taken)
+    }
+
+    fn take_from(&self, index: usize) -> Self {
+        let taken = self.data.take(index);
+        self.to_data_offset(taken)
+    }
+
+    fn take_split(&self, index: usize) -> (Self, Self) {
+        let (left, right) = self.data.take_split(index);
+        (self.to_data_offset(left), self.to_data_offset(right))
     }
 
     fn position<P>(&self, predicate: P) -> Option<usize>
@@ -159,52 +181,16 @@ where
         self.data.position(predicate)
     }
 
+    fn iter_elements(&self) -> Self::Iter {
+        self.data.iter_elements()
+    }
+
+    fn iter_indices(&self) -> Self::IterIndices {
+        self.data.iter_indices()
+    }
+
     fn slice_index(&self, count: usize) -> Result<usize, Needed> {
         self.data.slice_index(count)
-    }
-}
-
-impl<'i, I> InputLength for Located<'i, I>
-where
-    I: ?Sized,
-    &'i I: InputLength,
-{
-    fn input_len(&self) -> usize {
-        self.data.input_len()
-    }
-}
-
-impl<'i, I> InputTake for Located<'i, I>
-where
-    I: ?Sized,
-    Self: Slice<RangeFrom<usize>> + Slice<RangeTo<usize>>,
-{
-    fn take(&self, count: usize) -> Self {
-        self.slice(..count)
-    }
-
-    fn take_split(&self, count: usize) -> (Self, Self) {
-        (self.slice(count..), self.slice(..count))
-    }
-}
-
-impl<'i, I> InputTakeAtPosition for Located<'i, I>
-where
-    I: ?Sized,
-    &'i I: InputIter + InputLength + InputTakeAtPosition,
-    Self: Slice<RangeFrom<usize>> + Slice<RangeTo<usize>>,
-{
-    type Item = <&'i I as InputIter>::Item;
-
-    fn split_at_position_complete<P, E>(&self, predicate: P) -> IResult<Self, Self, E>
-    where
-        P: Fn(Self::Item) -> bool,
-        E: ParseError<Self>,
-    {
-        match self.split_at_position(predicate) {
-            Err(ErrorMode::Incomplete(_)) => Ok(self.take_split(self.input_len())),
-            result => result,
-        }
     }
 
     fn split_at_position<P, E>(&self, predicate: P) -> IResult<Self, Self, E>
@@ -230,6 +216,17 @@ where
         }
     }
 
+    fn split_at_position_complete<P, E>(&self, predicate: P) -> IResult<Self, Self, E>
+    where
+        P: Fn(Self::Item) -> bool,
+        E: ParseError<Self>,
+    {
+        match self.split_at_position(predicate) {
+            Err(ErrorMode::Incomplete(_)) => Ok(self.take_split(self.input_len())),
+            result => result,
+        }
+    }
+
     fn split_at_position1_complete<P, E>(
         &self,
         predicate: P,
@@ -252,6 +249,29 @@ where
             }
         }
     }
+
+    // TODO: Write tests that confirm that the default implementations of these  modal
+    //       `split_at_position` functions function properly.
+
+    //fn split_at_position_mode<M, P, E>(&self, predicate: P) -> PResult<M, Self, Self, E>
+    //where
+    //    M: OutputMode,
+    //    P: Fn(Self::Item) -> bool,
+    //    E: ParseError<Self>,
+    //{
+    //}
+
+    //fn split_at_position_mode1<M, P, E>(
+    //    &self,
+    //    predicate: P,
+    //    kind: ErrorKind,
+    //) -> PResult<M, Self, Self, E>
+    //where
+    //    M: OutputMode,
+    //    P: Fn(Self::Item) -> bool,
+    //    E: ParseError<Self>,
+    //{
+    //}
 }
 
 impl<'i, I> Location for Located<'i, I>
@@ -269,21 +289,6 @@ where
 {
     fn offset(&self, other: &Self) -> usize {
         other.location.saturating_sub(self.location)
-    }
-}
-
-impl<'i, I, R> Slice<R> for Located<'i, I>
-where
-    I: ?Sized,
-    &'i I: AsBytes + Offset + Slice<R> + Slice<RangeTo<usize>>,
-{
-    fn slice(&self, range: R) -> Self {
-        let sliced = self.data.slice(range);
-        let offset = self.data.offset(&sliced);
-        Located {
-            data: sliced,
-            location: self.location + offset,
-        }
     }
 }
 
@@ -309,7 +314,7 @@ impl<I, T> Stateful<I, T> {
         }
     }
 
-    fn clone_map_result<E, F>(&self, f: F) -> IResult<Self, Self, E>
+    fn clone_map_iresult<E, F>(&self, f: F) -> IResult<Self, Self, E>
     where
         E: ParseError<Self>,
         T: Clone,
@@ -406,54 +411,29 @@ where
     }
 }
 
-impl<I, T> InputIter for Stateful<I, T>
+impl<I, T> Input for Stateful<I, T>
 where
-    I: InputIter,
+    I: Input,
+    T: Clone,
 {
     type Item = I::Item;
     type Iter = I::Iter;
-    type IterElem = I::IterElem;
+    type IterIndices = I::IterIndices;
 
-    fn iter_indices(&self) -> Self::Iter {
-        self.data.iter_indices()
-    }
-
-    fn iter_elements(&self) -> Self::IterElem {
-        self.data.iter_elements()
-    }
-
-    fn position<P>(&self, predicate: P) -> Option<usize>
-    where
-        P: Fn(Self::Item) -> bool,
-    {
-        self.data.position(predicate)
-    }
-
-    fn slice_index(&self, count: usize) -> Result<usize, Needed> {
-        self.data.slice_index(count)
-    }
-}
-
-impl<I, T> InputLength for Stateful<I, T>
-where
-    I: InputLength,
-{
     fn input_len(&self) -> usize {
         self.data.input_len()
     }
-}
 
-impl<I, T> InputTake for Stateful<I, T>
-where
-    I: InputTake,
-    T: Clone,
-{
     fn take(&self, count: usize) -> Self {
         self.clone_map(move |data| data.take(count))
     }
 
-    fn take_split(&self, count: usize) -> (Self, Self) {
-        let (left, right) = self.data.take_split(count);
+    fn take_from(&self, index: usize) -> Self {
+        self.clone_map(move |data| data.take_from(index))
+    }
+
+    fn take_split(&self, index: usize) -> (Self, Self) {
+        let (left, right) = self.data.take_split(index);
         (
             Stateful {
                 data: left,
@@ -465,21 +445,24 @@ where
             },
         )
     }
-}
 
-impl<I, T> InputTakeAtPosition for Stateful<I, T>
-where
-    I: InputTakeAtPosition,
-    T: Clone,
-{
-    type Item = <I as InputTakeAtPosition>::Item;
-
-    fn split_at_position_complete<P, E>(&self, predicate: P) -> IResult<Self, Self, E>
+    fn position<P>(&self, predicate: P) -> Option<usize>
     where
         P: Fn(Self::Item) -> bool,
-        E: ParseError<Self>,
     {
-        self.clone_map_result(move |data| data.split_at_position_complete(predicate))
+        self.data.position(predicate)
+    }
+
+    fn iter_elements(&self) -> Self::Iter {
+        self.data.iter_elements()
+    }
+
+    fn iter_indices(&self) -> Self::IterIndices {
+        self.data.iter_indices()
+    }
+
+    fn slice_index(&self, count: usize) -> Result<usize, Needed> {
+        self.data.slice_index(count)
     }
 
     fn split_at_position<P, E>(&self, predicate: P) -> IResult<Self, Self, E>
@@ -487,7 +470,7 @@ where
         P: Fn(Self::Item) -> bool,
         E: ParseError<Self>,
     {
-        self.clone_map_result(move |data| data.split_at_position(predicate))
+        self.clone_map_iresult(move |data| data.split_at_position(predicate))
     }
 
     fn split_at_position1<P, E>(&self, predicate: P, kind: ErrorKind) -> IResult<Self, Self, E>
@@ -495,7 +478,15 @@ where
         P: Fn(Self::Item) -> bool,
         E: ParseError<Self>,
     {
-        self.clone_map_result(move |data| data.split_at_position1(predicate, kind))
+        self.clone_map_iresult(move |data| data.split_at_position1(predicate, kind))
+    }
+
+    fn split_at_position_complete<P, E>(&self, predicate: P) -> IResult<Self, Self, E>
+    where
+        P: Fn(Self::Item) -> bool,
+        E: ParseError<Self>,
+    {
+        self.clone_map_iresult(move |data| data.split_at_position_complete(predicate))
     }
 
     fn split_at_position1_complete<P, E>(
@@ -507,8 +498,31 @@ where
         P: Fn(Self::Item) -> bool,
         E: ParseError<Self>,
     {
-        self.clone_map_result(move |data| data.split_at_position1_complete(predicate, kind))
+        self.clone_map_iresult(move |data| data.split_at_position1_complete(predicate, kind))
     }
+
+    // TODO: Write tests that confirm that the default implementations of these  modal
+    //       `split_at_position` functions function properly.
+
+    //fn split_at_position_mode<M, P, E>(&self, predicate: P) -> PResult<M, Self, Self, E>
+    //where
+    //    M: OutputMode,
+    //    P: Fn(Self::Item) -> bool,
+    //    E: ParseError<Self>,
+    //{
+    //}
+
+    //fn split_at_position_mode1<M, P, E>(
+    //    &self,
+    //    predicate: P,
+    //    kind: ErrorKind,
+    //) -> PResult<M, Self, Self, E>
+    //where
+    //    M: OutputMode,
+    //    P: Fn(Self::Item) -> bool,
+    //    E: ParseError<Self>,
+    //{
+    //}
 }
 
 impl<I, T> Location for Stateful<I, T>
@@ -529,20 +543,6 @@ where
     }
 }
 
-impl<I, T, R> Slice<R> for Stateful<I, T>
-where
-    I: Slice<R>,
-    T: Clone,
-{
-    fn slice(&self, range: R) -> Self {
-        let data = self.data.slice(range);
-        Stateful {
-            data,
-            state: self.state.clone(),
-        }
-    }
-}
-
 pub fn bof<I, E>(input: I) -> IResult<I, I, E>
 where
     I: Clone + Location,
@@ -556,11 +556,12 @@ where
     }
 }
 
-pub fn span<I, O, E, F>(mut parser: F) -> impl FnMut(I) -> IResult<I, ((usize, usize), O), E>
+pub fn span<I, F>(
+    mut parser: F,
+) -> impl FnMut(I) -> IResult<I, ((usize, usize), F::Output), F::Error>
 where
     I: Clone + Location,
-    E: ParseError<I>,
-    F: Parser<I, O, E>,
+    F: Parser<I>,
 {
     move |input: I| {
         let start = input.location();
