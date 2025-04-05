@@ -1,6 +1,6 @@
 [package]
 name = "pori"
-version = "0.0.0"
+version = "0.1.0"
 authors = ["Sean Olson <olson.sean.k@gmail.com>"]
 description = "Parser location and state extensions for nom."
 repository = "https://github.com/olson-sean-k/pori"
