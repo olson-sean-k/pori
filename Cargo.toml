@@ -2,7 +2,7 @@
 name = "pori"
 version = "0.0.0"
 authors = ["Sean Olson <olson.sean.k@gmail.com>"]
-description = "Parser state and error extensions for nom."
+description = "Parser location and state extensions for nom."
 repository = "https://github.com/olson-sean-k/pori"
 readme = "README.md"
 edition = "2021"
@@ -10,6 +10,7 @@ rust-version = "1.65.0"
 license = "MIT"
 keywords = [
     "diagnostics",
+    "parser",
     "nom",
 ]
 categories = ["parsing"]
